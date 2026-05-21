@@ -1,91 +1,88 @@
-# MTP Model Toggle -- swap between 35B-A3B (quality) and 8B (speed/long ctx)
-# Hasznalat: & "C:\AI\scripts\switch-mtp-model.ps1" [-To35B] [-To8B]
+# switch-mtp-model.ps1
+# MTP modell váltó — leállítja az aktuálisat, elindítja a kiválasztottat
+# Egyetlen port (8082) — egyszerre csak egy kis modell futhat
+
 param(
-    [switch]$To35B,
-    [switch]$To8B
+    [ValidateSet("35B", "9B", "8B", "4B", "")]
+    [string]$To = ""
 )
 
-$server35B = "C:\AI\scripts\start-mtp-server.ps1"
-$server8B  = "C:\AI\scripts\start-mtp-8b-server.ps1"
+$ErrorActionPreference = "Stop"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-function Get-MtpProcess {
-    Get-Process -Name llama-server -EA SilentlyContinue
-}
-
-function Show-Status {
-    $procs = Get-MtpProcess
-    if (-not $procs) {
-        Write-Host "  Nincs futo llama-server" -ForegroundColor Gray
-        return
-    }
-    foreach ($p in $procs) {
-        $mb = [math]::Round($p.WorkingSet64/1MB, 0)
-        Write-Host ("  PID {0} | RAM: {1} MB | fut: {2} perce" -f $p.Id, $mb, [math]::Round((Get-Date - $p.StartTime).TotalMinutes, 0)) -ForegroundColor Cyan
-    }
-}
-
-function Get-FreeRAM {
-    $os = Get-CimInstance Win32_OperatingSystem
-    return [math]::Round($os.FreePhysicalMemory/1KB, 0)
-}
-
-function Stop-MtpServer {
-    $procs = Get-MtpProcess
+function Stop-LlamaServer {
+    $procs = Get-Process -Name "llama-server" -ErrorAction SilentlyContinue
     if ($procs) {
-        Write-Host "Leallitas..." -ForegroundColor Yellow
+        Write-Host "[STOP] llama-server leallitasa..." -ForegroundColor Yellow
         $procs | Stop-Process -Force
-        Start-Sleep -Seconds 3
-        Write-Host "OK  llama-server leallitva" -ForegroundColor Green
+        Start-Sleep -Milliseconds 800
+        Write-Host "[OK] Leallitva." -ForegroundColor Green
     } else {
-        Write-Host "  Nem fut llama-server, nincs mit leallitani" -ForegroundColor Gray
+        Write-Host "[INFO] Nem fut llama-server folyamat." -ForegroundColor Gray
     }
 }
 
-# --- Interaktiv menu ha nincs flag ---
-if (-not $To35B -and -not $To8B) {
+function Show-Menu {
     Write-Host ""
-    Write-Host "=== MTP Model Toggle ===" -ForegroundColor Magenta
-    Write-Host "Jelenlegi allapot:" -ForegroundColor Cyan
-    Show-Status
-    $freeGB = [math]::Round((Get-FreeRAM), 0)
-    Write-Host ("Szabad RAM: {0} GB" -f $freeGB) -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  [1] Valtas 35B-A3B-re  (miniseg, 16K ctx, ~22 GB RAM)" -ForegroundColor White
-    Write-Host "  [2] Valtas 8B-re       (gyors, 32K ctx, ~10 GB RAM)"   -ForegroundColor White
-    Write-Host "  [3] Mindketto leallitasa"                                -ForegroundColor White
-    Write-Host "  [Q] Kilepes"                                             -ForegroundColor White
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host "  MTP Model Valto - Snapdragon X Elite" -ForegroundColor Cyan
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host "  [1] Qwen3.6 MTP 35B-A3B  (minoseg, port 8081)" -ForegroundColor White
+    Write-Host "  [2] Qwen3.5 MTP 9B       (gyors, port 8082)" -ForegroundColor White
+    Write-Host "  [3] Qwen3.5 MTP 8B       (kozepes, port 8082)" -ForegroundColor White
+    Write-Host "  [4] Qwen3.5 MTP 4B       (leggyorsabb, port 8082)" -ForegroundColor White
+    Write-Host "  [Q] Kilepes" -ForegroundColor Gray
+    Write-Host "============================================" -ForegroundColor Cyan
     Write-Host ""
     $choice = Read-Host "Valasztas"
+    return $choice
+}
 
-    switch ($choice) {
-        "1" { $To35B = $true }
-        "2" { $To8B  = $true }
-        "3" { Stop-MtpServer; exit 0 }
-        default { Write-Host "Kilepes" -ForegroundColor Gray; exit 0 }
+function Start-Model {
+    param([string]$Model)
+
+    $scripts = @{
+        "35B" = "start-mtp-35b-server.ps1"
+        "9B"  = "start-mtp-9b-server.ps1"
+        "8B"  = "start-mtp-8b-server.ps1"
+        "4B"  = "start-mtp-4b-server.ps1"
+    }
+    $portMap = @{
+        "35B" = 8081
+        "9B"  = 8082
+        "8B"  = 8082
+        "4B"  = 8082
+    }
+
+    $script = Join-Path $ScriptDir $scripts[$Model]
+
+    if (-not (Test-Path $script)) {
+        Write-Host "[HIBA] Szkript nem talalhato: $script" -ForegroundColor Red
+        return
+    }
+
+    Write-Host ""
+    Write-Host "[START] $Model szerver indul (port: $($portMap[$Model]))..." -ForegroundColor Green
+    Write-Host "Web UI: http://localhost:$($portMap[$Model])" -ForegroundColor Cyan
+    Write-Host ""
+
+    & $script
+}
+
+# --- Fő logika ---
+
+if ($To -ne "") {
+    Stop-LlamaServer
+    Start-Model -Model $To
+} else {
+    Stop-LlamaServer
+    $choice = Show-Menu
+    switch ($choice.ToUpper()) {
+        "1" { Start-Model -Model "35B" }
+        "2" { Start-Model -Model "9B" }
+        "3" { Start-Model -Model "8B" }
+        "4" { Start-Model -Model "4B" }
+        "Q" { Write-Host "Kilepes." -ForegroundColor Gray; exit 0 }
+        default { Write-Host "[HIBA] Ervenytelen valasztas: $choice" -ForegroundColor Red }
     }
 }
-
-# --- Vegrehajtas ---
-Write-Host ""
-if ($To35B) {
-    Write-Host "=== Valtas: 35B-A3B (miniseg, 16K ctx) ===" -ForegroundColor Magenta
-    Stop-MtpServer
-    Write-Host "Inditasa: start-mtp-server.ps1 ..." -ForegroundColor Cyan
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$server35B`"" -WindowStyle Normal
-    Start-Sleep -Seconds 5
-    Write-Host "OK  35B-A3B szerver elindult (port 8081)" -ForegroundColor Green
-    Write-Host "    Varj ~30 masodpercet amig betolt" -ForegroundColor Gray
-}
-
-if ($To8B) {
-    Write-Host "=== Valtas: Qwen3-8B (gyors, 32K ctx) ===" -ForegroundColor Magenta
-    Stop-MtpServer
-    Write-Host "Inditasa: start-mtp-8b-server.ps1 ..." -ForegroundColor Cyan
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$server8B`"" -WindowStyle Normal
-    Start-Sleep -Seconds 5
-    Write-Host "OK  8B szerver elindult (port 8082)" -ForegroundColor Green
-    Write-Host "    Varj ~10 masodpercet amig betolt" -ForegroundColor Gray
-}
-
-Write-Host ""
-Write-Host "Szabad RAM most: $([math]::Round((Get-FreeRAM),0)) GB" -ForegroundColor Cyan
