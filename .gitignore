@@ -1,0 +1,18 @@
+# Modellek - soha nem commitolni
+*.gguf
+*.ggml
+*.bin
+models/
+
+# Lokalis config - gepfuggo utvonalak
+*.local.ps1
+.env
+*.pid
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Temp
+_tmp/
+*.log
