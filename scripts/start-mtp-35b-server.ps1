@@ -13,7 +13,7 @@
 #   --spec-draft-n-max 3: 3 MTP reteg (modell tamogatja)
 #   --mlock            : RAM-ba zarja a modellt, nem pagel ki (fontos CPU inferencial!)
 
-$server = "C:\Users\istva\SnapdragonNPU_Build\install-mtp\llama-server.exe"
+$server = "C:\AI\apps\llama-mtp\install-mtp\llama-server.exe"
 $model  = "E:\models\mtp\Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 
 Write-Host "MTP szerver inditasa (optimalizalt)..." -ForegroundColor Cyan
