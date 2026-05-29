@@ -9,8 +9,8 @@ param(
     [switch]$SkipBuild,
     [switch]$SkipDownload,
     [string]$ModelDir   = "E:\models\mtp",
-    [string]$BuildRoot  = "$env:USERPROFILE\SnapdragonNPU_Build",
-    [string]$InstallDir = "$env:USERPROFILE\SnapdragonNPU_Build\install-mtp"
+    [string]$BuildRoot  = "C:\AI\apps\llama-mtp",
+    [string]$InstallDir = "C:\AI\apps\llama-mtp\install-mtp"
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,8 +57,8 @@ OK "MSVC ARM64 env loaded"
 if (-not $SkipBuild) {
     Log "=== LLAMA.CPP SOURCE ===" "Magenta"
 
-    $llamaSrc = Join-Path $BuildRoot "llama-mtp"
-    $llamaBld = Join-Path $BuildRoot "llama-mtp-build"
+    $llamaSrc = Join-Path $BuildRoot "llama-src"
+    $llamaBld = Join-Path $BuildRoot "llama-build"
 
     $ErrorActionPreference = "Continue"
     if (Test-Path (Join-Path $llamaSrc ".git")) {
@@ -199,29 +199,12 @@ if (-not $SkipDownload) {
     }
 }
 
-# ---- 7. SUMMARY + LAUNCH SCRIPT ----
+# ---- 7. SUMMARY ----
 $elapsed = [math]::Round(((Get-Date) - $StartTime).TotalMinutes, 1)
 
 $modelFile = Get-ChildItem $ModelDir -Filter "*Q4_K*.gguf" -Recurse -EA SilentlyContinue |
              Sort-Object Length -Descending | Select-Object -First 1
 $mPath = if ($modelFile) { $modelFile.FullName } else { "$ModelDir\<model>.gguf" }
-
-$serverExe   = Join-Path $InstallDir "llama-server.exe"
-$startScript = "C:\AI\scripts\start-mtp-server.ps1"
-New-Item -ItemType Directory -Path (Split-Path $startScript) -Force -EA SilentlyContinue | Out-Null
-
-$launchContent = @"
-# MTP llama-server -- Qwen3.6-35B-A3B
-# Snapdragon X Elite ARM64, 12 Oryon cores, CPU-only
-`$server = "$serverExe"
-`$model  = "$mPath"
-Write-Host "Starting MTP server..." -ForegroundColor Cyan
-Write-Host "Model: `$model" -ForegroundColor Gray
-Write-Host "API:   http://localhost:8081/v1" -ForegroundColor Green
-& `$server -m `$model --spec-type mtp --spec-draft-n-max 3 -t 12 -c 8192 --host 127.0.0.1 --port 8081
-"@
-Set-Content -Path $startScript -Encoding UTF8 -Value $launchContent
-OK "Launch script saved: $startScript"
 
 Log "" "White"
 Log "============================================================" "Green"
@@ -229,16 +212,8 @@ Log " DONE! ($elapsed min)" "Green"
 Log "============================================================" "Green"
 Log "  Build:    $InstallDir" "White"
 Log "  Model:    $mPath" "White"
-Log "  Launcher: $startScript" "White"
 Log "" "White"
 Log "  START SERVER:" "Cyan"
-Log "    powershell -ExecutionPolicy Bypass -File '$startScript'" "Yellow"
+Log "    powershell -ExecutionPolicy Bypass -File 'scripts\start-mtp-35b-server.ps1'" "Yellow"
 Log "" "White"
 Log "  API: http://localhost:8081/v1  (OpenAI-compatible)" "Cyan"
-Log "" "White"
-Log "  LiteLLM entry (WSL ~/litellm/config.yaml):" "Cyan"
-Log "    - model_name: local-mtp-cpu" "White"
-Log "      litellm_params:" "White"
-Log "        model: openai/qwen3-mtp" "White"
-Log "        api_base: http://localhost:8081/v1" "White"
-Log "        api_key: none" "White"
